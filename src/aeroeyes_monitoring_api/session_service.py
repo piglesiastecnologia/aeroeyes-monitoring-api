@@ -1,7 +1,8 @@
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
+from aeroeyes_monitoring_api.clock import utc_now
 from aeroeyes_monitoring_api.domain.identity import uuid7
 from aeroeyes_monitoring_api.domain.monitoring_session import (
     MonitoringSession,
@@ -12,10 +13,6 @@ from aeroeyes_monitoring_api.session_repository import SessionRepository
 
 class SessionNotFoundError(LookupError):
     """Raised when a requested monitoring session does not exist."""
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class SessionService:

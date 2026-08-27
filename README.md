@@ -70,6 +70,31 @@ Sessions are temporarily stored only in process memory. They are lost whenever
 the application restarts, and the API must run with a single worker during this
 MVP phase. PostgreSQL will replace this temporary storage in a later increment.
 
+## Attention-event ingestion
+
+Submit an immutable attention event to its monitoring session:
+
+```http
+POST /sessions/{session_id}/events
+```
+
+The producer owns the UUIDv7 `event_id` and event occurrence time. The API owns
+`received_at`. A first ingestion returns `201 Created`; an identical replay of
+the same event in the same session returns `200 OK` with
+`status: "already_processed"` and the original stored event. Reusing an event ID
+with changed semantics or another session returns `409 Conflict`.
+
+Events are append-only. A completed session still accepts a late-delivered event
+when its producer timestamp falls within the session's inclusive start/end
+window.
+
+Event storage and event-ID arbitration are currently process-local,
+single-worker, and non-persistent. Restarting the API loses session state,
+ingested events, and durable replay protection; an old retry will normally fail
+because its session was also lost. Separate in-memory session and event locks
+also mean session completion can race with event ingestion. PostgreSQL will
+later provide durable identity arbitration and a shared transactional boundary.
+
 ## Tests
 
 Run the complete test suite:
