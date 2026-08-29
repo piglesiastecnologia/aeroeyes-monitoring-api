@@ -16,10 +16,10 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-Install the package with its test dependencies:
+Install the package with its test and migration dependencies:
 
 ```bash
-python -m pip install -e ".[test]"
+python -m pip install -e ".[test,migration]"
 ```
 
 Run the API locally:
@@ -35,6 +35,28 @@ The shallow liveness endpoint is available at `GET /health`:
   "status": "ok",
   "service": "aeroeyes-monitoring-api"
 }
+```
+
+## PostgreSQL database foundation
+
+PostgreSQL is the target runtime persistence store. The initial schema contains
+only monitoring sessions and attention events. Runtime repository composition
+has not switched to PostgreSQL yet, so normal application startup still uses
+the in-memory repositories and does not require a database connection.
+
+Set `DATABASE_URL` when running migrations, using the synchronous Psycopg 3
+SQLAlchemy URL format:
+
+```bash
+export DATABASE_URL="postgresql+psycopg://aeroeyes:local-password@localhost:5432/aeroeyes"
+```
+
+Use local development credentials and do not commit secrets or `.env` files.
+Apply or revert the schema with Alembic:
+
+```bash
+python -m alembic upgrade head
+python -m alembic downgrade base
 ```
 
 ## Monitoring sessions
