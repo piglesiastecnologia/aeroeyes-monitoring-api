@@ -49,6 +49,19 @@ class PostgresSessionRepository:
             return None
         return _record_to_domain(record)
 
+    def get_for_event_ingestion(
+        self,
+        session_id: UUID,
+    ) -> MonitoringSession | None:
+        record = self._session.scalar(
+            select(MonitoringSessionRecord)
+            .where(MonitoringSessionRecord.session_id == session_id)
+            .with_for_update(read=True)
+        )
+        if record is None:
+            return None
+        return _record_to_domain(record)
+
     def complete(
         self,
         session_id: UUID,
