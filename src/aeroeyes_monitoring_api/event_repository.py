@@ -28,6 +28,22 @@ class EventRepository(Protocol):
     def accept(self, candidate: IngestedAttentionEvent) -> EventAcceptance: ...
 
 
+def _resolve_existing_event(
+    existing: IngestedAttentionEvent,
+    candidate: IngestedAttentionEvent,
+) -> EventAcceptance:
+    if (
+        existing.session_id == candidate.session_id
+        and existing.semantic_payload == candidate.semantic_payload
+    ):
+        return EventAcceptance(
+            EventAcceptanceStatus.ALREADY_PROCESSED,
+            existing,
+        )
+
+    return EventAcceptance(EventAcceptanceStatus.CONFLICT, existing)
+
+
 class InMemoryEventRepository:
     def __init__(self) -> None:
         self._events: dict[UUID, IngestedAttentionEvent] = {}
@@ -42,16 +58,7 @@ class InMemoryEventRepository:
         if existing is None:
             return None
 
-        if (
-            existing.session_id == candidate.session_id
-            and existing.semantic_payload == candidate.semantic_payload
-        ):
-            return EventAcceptance(
-                EventAcceptanceStatus.ALREADY_PROCESSED,
-                existing,
-            )
-
-        return EventAcceptance(EventAcceptanceStatus.CONFLICT, existing)
+        return _resolve_existing_event(existing, candidate)
 
     def resolve_existing(
         self,
