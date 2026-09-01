@@ -13,10 +13,9 @@ from aeroeyes_monitoring_api.domain.monitoring_session import SessionStatus
 from aeroeyes_monitoring_api.event_repository import (
     EventAcceptance,
     EventAcceptanceStatus,
-    EventRepository,
 )
-from aeroeyes_monitoring_api.session_repository import SessionRepository
 from aeroeyes_monitoring_api.session_service import SessionNotFoundError
+from aeroeyes_monitoring_api.unit_of_work import UnitOfWork
 
 
 class UnsupportedSchemaVersionError(ValueError):
@@ -34,12 +33,10 @@ class EventConflictError(RuntimeError):
 class EventIngestionService:
     def __init__(
         self,
-        session_repository: SessionRepository,
-        event_repository: EventRepository,
+        unit_of_work_factory: Callable[[], UnitOfWork],
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
-        self._session_repository = session_repository
-        self._event_repository = event_repository
+        self._unit_of_work_factory = unit_of_work_factory
         self._clock = clock
 
     def ingest(
@@ -58,10 +55,6 @@ class EventIngestionService:
         if type(schema_version) is not int or schema_version != 1:
             raise UnsupportedSchemaVersionError(schema_version)
 
-        session = self._session_repository.get(session_id)
-        if session is None:
-            raise SessionNotFoundError(session_id)
-
         candidate = IngestedAttentionEvent(
             event_id=event_id,
             session_id=session_id,
@@ -75,25 +68,31 @@ class EventIngestionService:
             schema_version=schema_version,
         )
 
-        existing = self._event_repository.resolve_existing(candidate)
-        if (
-            existing is not None
-            and existing.status is EventAcceptanceStatus.ALREADY_PROCESSED
-        ):
-            return existing
+        with self._unit_of_work_factory() as uow:
+            existing = uow.events.resolve_existing(candidate)
+            if (
+                existing is not None
+                and existing.status is EventAcceptanceStatus.ALREADY_PROCESSED
+            ):
+                return existing
 
-        if occurred_at < session.started_at:
-            raise EventOutsideSessionError(session_id)
-        if (
-            session.status is SessionStatus.COMPLETED
-            and session.ended_at is not None
-            and occurred_at > session.ended_at
-        ):
-            raise EventOutsideSessionError(session_id)
+            session = uow.sessions.get_for_event_ingestion(session_id)
+            if session is None:
+                raise SessionNotFoundError(session_id)
 
-        result = self._event_repository.accept(candidate)
+            if occurred_at < session.started_at:
+                raise EventOutsideSessionError(session_id)
+            if (
+                session.status is SessionStatus.COMPLETED
+                and session.ended_at is not None
+                and occurred_at > session.ended_at
+            ):
+                raise EventOutsideSessionError(session_id)
 
-        if result.status is EventAcceptanceStatus.CONFLICT:
-            raise EventConflictError(event_id)
+            result = uow.events.accept(candidate)
 
-        return result
+            if result.status is EventAcceptanceStatus.CONFLICT:
+                raise EventConflictError(event_id)
+
+            uow.commit()
+            return result

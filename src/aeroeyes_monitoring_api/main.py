@@ -7,13 +7,13 @@ from aeroeyes_monitoring_api.event_ingestion_service import EventIngestionServic
 from aeroeyes_monitoring_api.event_repository import InMemoryEventRepository
 from aeroeyes_monitoring_api.session_repository import InMemorySessionRepository
 from aeroeyes_monitoring_api.session_service import SessionService
+from aeroeyes_monitoring_api.unit_of_work import InMemoryUnitOfWork
 
 session_repository = InMemorySessionRepository()
 session_service = SessionService(session_repository)
 event_repository = InMemoryEventRepository()
 event_ingestion_service = EventIngestionService(
-    session_repository,
-    event_repository,
+    lambda: InMemoryUnitOfWork(session_repository, event_repository),
 )
 
 app = FastAPI(
