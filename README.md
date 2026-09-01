@@ -25,7 +25,9 @@ python -m pip install -e ".[test,migration]"
 Run the API locally:
 
 ```bash
-python -m uvicorn aeroeyes_monitoring_api.main:app --reload
+export DATABASE_URL="postgresql+psycopg://aeroeyes:local-password@localhost:5432/aeroeyes"
+python -m alembic upgrade head
+python -m uvicorn aeroeyes_monitoring_api.main:create_app --factory --reload
 ```
 
 The shallow liveness endpoint is available at `GET /health`:
@@ -39,10 +41,9 @@ The shallow liveness endpoint is available at `GET /health`:
 
 ## PostgreSQL database foundation
 
-PostgreSQL is the target runtime persistence store. The initial schema contains
-only monitoring sessions and attention events. Runtime repository composition
-has not switched to PostgreSQL yet, so normal application startup still uses
-the in-memory repositories and does not require a database connection.
+PostgreSQL is the runtime persistence store. The initial schema contains only
+monitoring sessions and attention events. Normal application startup requires
+`DATABASE_URL`; there is no automatic fallback to in-memory persistence.
 
 Set `DATABASE_URL` when running migrations, using the synchronous Psycopg 3
 SQLAlchemy URL format:
@@ -88,9 +89,8 @@ POST /sessions/{session_id}/complete
 Completion is idempotent. Repeated completion requests return the existing
 completed session and preserve its original `ended_at` value.
 
-Sessions are temporarily stored only in process memory. They are lost whenever
-the application restarts, and the API must run with a single worker during this
-MVP phase. PostgreSQL will replace this temporary storage in a later increment.
+Sessions are stored in PostgreSQL and remain available across application
+restarts and multiple application instances using the same database.
 
 ## Attention-event ingestion
 
@@ -110,12 +110,9 @@ Events are append-only. A completed session still accepts a late-delivered event
 when its producer timestamp falls within the session's inclusive start/end
 window.
 
-Event storage and event-ID arbitration are currently process-local,
-single-worker, and non-persistent. Restarting the API loses session state,
-ingested events, and durable replay protection; an old retry will normally fail
-because its session was also lost. Separate in-memory session and event locks
-also mean session completion can race with event ingestion. PostgreSQL will
-later provide durable identity arbitration and a shared transactional boundary.
+Event storage and event-ID arbitration use PostgreSQL. Session validation and
+event acceptance share the transaction owned by a per-operation unit of work,
+so persistence and replay protection do not depend on process-local locks.
 
 ## Tests
 

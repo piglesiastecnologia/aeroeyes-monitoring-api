@@ -1,11 +1,10 @@
 import asyncio
 
 import httpx
+from fastapi import FastAPI
 
-from aeroeyes_monitoring_api.main import app
 
-
-async def request_health() -> httpx.Response:
+async def request_health(app: FastAPI) -> httpx.Response:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
         transport=transport,
@@ -14,8 +13,8 @@ async def request_health() -> httpx.Response:
         return await client.get("/health")
 
 
-def test_health() -> None:
-    response = asyncio.run(request_health())
+def test_health(app: FastAPI) -> None:
+    response = asyncio.run(request_health(app))
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"

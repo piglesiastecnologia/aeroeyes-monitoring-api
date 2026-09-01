@@ -7,19 +7,32 @@ from aeroeyes_monitoring_api.domain.monitoring_session import (
     MonitoringSession,
     SessionStatus,
 )
+from aeroeyes_monitoring_api.event_repository import InMemoryEventRepository
 from aeroeyes_monitoring_api.session_repository import InMemorySessionRepository
 from aeroeyes_monitoring_api.session_service import (
     SessionNotFoundError,
     SessionService,
 )
+from aeroeyes_monitoring_api.unit_of_work import InMemoryUnitOfWork
 
 SESSION_ID = UUID("01890f3d-2d00-7000-8000-000000000001")
 STARTED_AT = datetime(2026, 8, 27, 12, 0, tzinfo=timezone.utc)
 
 
+def service_for(
+    repository: InMemorySessionRepository | None = None,
+    **kwargs,
+) -> SessionService:
+    sessions = repository or InMemorySessionRepository()
+    events = InMemoryEventRepository()
+    return SessionService(
+        lambda: InMemoryUnitOfWork(sessions, events),
+        **kwargs,
+    )
+
+
 def test_create_uses_injected_identity_and_clock() -> None:
-    service = SessionService(
-        InMemorySessionRepository(),
+    service = service_for(
         clock=lambda: STARTED_AT,
         session_id_factory=lambda: SESSION_ID,
     )
@@ -32,7 +45,7 @@ def test_create_uses_injected_identity_and_clock() -> None:
 
 
 def test_unknown_session_raises_not_found() -> None:
-    service = SessionService(InMemorySessionRepository())
+    service = service_for()
 
     with pytest.raises(SessionNotFoundError):
         service.get_session(uuid4())
@@ -51,7 +64,7 @@ def test_completion_uses_injected_clock() -> None:
         )
     )
     completed_at = STARTED_AT + timedelta(minutes=30)
-    service = SessionService(repository, clock=lambda: completed_at)
+    service = service_for(repository, clock=lambda: completed_at)
 
     completed = service.complete_session(SESSION_ID)
 
@@ -66,8 +79,7 @@ def test_repeated_completion_preserves_first_result() -> None:
             STARTED_AT + timedelta(minutes=35),
         )
     )
-    service = SessionService(
-        InMemorySessionRepository(),
+    service = service_for(
         clock=lambda: next(times),
         session_id_factory=lambda: SESSION_ID,
     )
@@ -78,3 +90,40 @@ def test_repeated_completion_preserves_first_result() -> None:
 
     assert repeated == first
     assert repeated.ended_at == STARTED_AT + timedelta(minutes=30)
+
+
+def test_each_operation_uses_a_fresh_unit_of_work_and_commits_writes() -> None:
+    sessions = InMemorySessionRepository()
+    events = InMemoryEventRepository()
+
+    class RecordingUnitOfWork(InMemoryUnitOfWork):
+        def __init__(self) -> None:
+            super().__init__(sessions, events)
+            self.commit_count = 0
+
+        def commit(self) -> None:
+            self.commit_count += 1
+
+    created_uows: list[RecordingUnitOfWork] = []
+
+    def unit_of_work_factory() -> RecordingUnitOfWork:
+        uow = RecordingUnitOfWork()
+        created_uows.append(uow)
+        return uow
+
+    completed_at = STARTED_AT + timedelta(minutes=30)
+    times = iter((STARTED_AT, completed_at))
+    service = SessionService(
+        unit_of_work_factory,
+        clock=lambda: next(times),
+        session_id_factory=lambda: SESSION_ID,
+    )
+
+    created = service.create_session()
+    retrieved = service.get_session(created.session_id)
+    completed = service.complete_session(created.session_id)
+
+    assert retrieved == created
+    assert completed.ended_at == completed_at
+    assert len(created_uows) == 3
+    assert [uow.commit_count for uow in created_uows] == [1, 0, 1]

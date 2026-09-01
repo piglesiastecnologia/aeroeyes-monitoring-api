@@ -16,12 +16,16 @@ TEST_DATABASE_URL_ENV = "TEST_DATABASE_URL"
 
 
 @pytest.fixture(scope="session")
-def postgres_engine() -> Iterator[Engine]:
+def test_database_url() -> str:
     database_url = os.environ.get(TEST_DATABASE_URL_ENV, "").strip()
     if not database_url:
         pytest.skip(f"{TEST_DATABASE_URL_ENV} is required for PostgreSQL tests")
+    return database_url
 
-    engine = create_database_engine(database_url)
+
+@pytest.fixture(scope="session")
+def postgres_engine(test_database_url: str) -> Iterator[Engine]:
+    engine = create_database_engine(test_database_url)
     Base.metadata.create_all(engine)
 
     yield engine
