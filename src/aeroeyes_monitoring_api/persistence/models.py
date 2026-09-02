@@ -42,6 +42,23 @@ class MonitoringSessionRecord(Base):
     )
 
 
+class SessionContextRecord(Base):
+    __tablename__ = "session_contexts"
+
+    session_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey(
+            "monitoring_sessions.session_id",
+            ondelete="CASCADE",
+        ),
+        primary_key=True,
+        nullable=False,
+    )
+    flight_number: Mapped[str | None] = mapped_column(Text, nullable=True)
+    departure_icao: Mapped[str | None] = mapped_column(Text, nullable=True)
+    destination_icao: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class AttentionEventRecord(Base):
     __tablename__ = "attention_events"
     __table_args__ = (
