@@ -18,6 +18,7 @@ from aeroeyes_monitoring_api.domain.monitoring_session import (
     MonitoringSession,
     SessionStatus,
 )
+from aeroeyes_monitoring_api.domain.session_context import SessionContext
 from aeroeyes_monitoring_api.event_repository import EventAcceptanceStatus
 from aeroeyes_monitoring_api.persistence.database import create_session_factory
 from aeroeyes_monitoring_api.persistence.models import (
@@ -60,6 +61,15 @@ def attention_event() -> IngestedAttentionEvent:
     )
 
 
+def session_context() -> SessionContext:
+    return SessionContext(
+        session_id=SESSION_ID,
+        flight_number="AZUL 1234",
+        departure_icao="SBGR",
+        destination_icao="SBRJ",
+    )
+
+
 def session_factory(engine: Engine) -> sessionmaker[Session]:
     return create_session_factory(engine)
 
@@ -78,15 +88,20 @@ def test_repositories_are_available_only_inside_active_unit_of_work(
         _ = uow.sessions
     with pytest.raises(RuntimeError, match="UnitOfWork is not active"):
         _ = uow.events
+    with pytest.raises(RuntimeError, match="UnitOfWork is not active"):
+        _ = uow.contexts
 
     with uow:
         assert uow.sessions is not None
         assert uow.events is not None
+        assert uow.contexts is not None
 
     with pytest.raises(RuntimeError, match="UnitOfWork is not active"):
         _ = uow.sessions
     with pytest.raises(RuntimeError, match="UnitOfWork is not active"):
         _ = uow.events
+    with pytest.raises(RuntimeError, match="UnitOfWork is not active"):
+        _ = uow.contexts
 
 
 def test_repositories_share_one_sqlalchemy_session_and_transaction(
@@ -94,12 +109,55 @@ def test_repositories_share_one_sqlalchemy_session_and_transaction(
 ) -> None:
     with PostgresUnitOfWork(session_factory(postgres_engine)) as uow:
         assert uow.sessions._session is uow.events._session
+        assert uow.events._session is uow.contexts._session
 
         uow.sessions.add(active_session())
         result = uow.events.accept(attention_event())
 
         assert result.status is EventAcceptanceStatus.CREATED
         uow.commit()
+
+
+def test_context_save_and_commit_persists(
+    postgres_engine: Engine,
+) -> None:
+    expected = session_context()
+    with PostgresUnitOfWork(session_factory(postgres_engine)) as uow:
+        uow.sessions.add(active_session())
+        uow.contexts.save(expected)
+        uow.commit()
+
+    with PostgresUnitOfWork(session_factory(postgres_engine)) as verification:
+        assert verification.contexts.get(SESSION_ID) == expected
+
+
+def test_context_save_without_commit_is_rolled_back_on_exit(
+    postgres_engine: Engine,
+) -> None:
+    seed_session(postgres_engine)
+
+    with PostgresUnitOfWork(session_factory(postgres_engine)) as uow:
+        uow.contexts.save(session_context())
+
+    with PostgresUnitOfWork(session_factory(postgres_engine)) as verification:
+        assert verification.contexts.get(SESSION_ID) is None
+
+
+def test_context_delete_and_rollback_preserves_row(
+    postgres_engine: Engine,
+) -> None:
+    expected = session_context()
+    with PostgresUnitOfWork(session_factory(postgres_engine)) as setup:
+        setup.sessions.add(active_session())
+        setup.contexts.save(expected)
+        setup.commit()
+
+    with PostgresUnitOfWork(session_factory(postgres_engine)) as uow:
+        assert uow.contexts.delete(SESSION_ID) is True
+        uow.rollback()
+
+    with PostgresUnitOfWork(session_factory(postgres_engine)) as verification:
+        assert verification.contexts.get(SESSION_ID) == expected
 
 
 def test_commit_persists_changes_from_both_repositories(

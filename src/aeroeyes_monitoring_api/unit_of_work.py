@@ -7,6 +7,10 @@ from aeroeyes_monitoring_api.event_repository import (
     EventRepository,
     InMemoryEventRepository,
 )
+from aeroeyes_monitoring_api.session_context_repository import (
+    InMemorySessionContextRepository,
+    SessionContextRepository,
+)
 from aeroeyes_monitoring_api.session_repository import (
     InMemorySessionRepository,
     SessionRepository,
@@ -23,6 +27,7 @@ class EventIngestionSessionRepository(SessionRepository, Protocol):
 class UnitOfWork(Protocol):
     sessions: EventIngestionSessionRepository
     events: EventRepository
+    contexts: SessionContextRepository
 
     def __enter__(self) -> Self: ...
 
@@ -43,9 +48,11 @@ class InMemoryUnitOfWork:
         self,
         sessions: InMemorySessionRepository,
         events: InMemoryEventRepository,
+        contexts: InMemorySessionContextRepository,
     ) -> None:
         self.sessions = sessions
         self.events = events
+        self.contexts = contexts
 
     def __enter__(self) -> Self:
         return self

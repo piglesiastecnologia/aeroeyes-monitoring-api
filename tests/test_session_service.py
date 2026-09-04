@@ -8,6 +8,9 @@ from aeroeyes_monitoring_api.domain.monitoring_session import (
     SessionStatus,
 )
 from aeroeyes_monitoring_api.event_repository import InMemoryEventRepository
+from aeroeyes_monitoring_api.session_context_repository import (
+    InMemorySessionContextRepository,
+)
 from aeroeyes_monitoring_api.session_repository import InMemorySessionRepository
 from aeroeyes_monitoring_api.session_service import (
     SessionNotFoundError,
@@ -25,8 +28,9 @@ def service_for(
 ) -> SessionService:
     sessions = repository or InMemorySessionRepository()
     events = InMemoryEventRepository()
+    contexts = InMemorySessionContextRepository()
     return SessionService(
-        lambda: InMemoryUnitOfWork(sessions, events),
+        lambda: InMemoryUnitOfWork(sessions, events, contexts),
         **kwargs,
     )
 
@@ -95,10 +99,11 @@ def test_repeated_completion_preserves_first_result() -> None:
 def test_each_operation_uses_a_fresh_unit_of_work_and_commits_writes() -> None:
     sessions = InMemorySessionRepository()
     events = InMemoryEventRepository()
+    contexts = InMemorySessionContextRepository()
 
     class RecordingUnitOfWork(InMemoryUnitOfWork):
         def __init__(self) -> None:
-            super().__init__(sessions, events)
+            super().__init__(sessions, events, contexts)
             self.commit_count = 0
 
         def commit(self) -> None:

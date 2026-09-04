@@ -24,6 +24,9 @@ from aeroeyes_monitoring_api.event_repository import (
     EventAcceptanceStatus,
     InMemoryEventRepository,
 )
+from aeroeyes_monitoring_api.session_context_repository import (
+    InMemorySessionContextRepository,
+)
 from aeroeyes_monitoring_api.session_repository import InMemorySessionRepository
 from aeroeyes_monitoring_api.session_service import SessionNotFoundError
 from aeroeyes_monitoring_api.unit_of_work import InMemoryUnitOfWork
@@ -58,8 +61,9 @@ def service_for(
     if monitoring_session is not None:
         sessions.add(monitoring_session)
     events = InMemoryEventRepository()
+    contexts = InMemorySessionContextRepository()
     service = EventIngestionService(
-        lambda: InMemoryUnitOfWork(sessions, events),
+        lambda: InMemoryUnitOfWork(sessions, events, contexts),
         clock=lambda: clock_time,
     )
     return service, sessions
@@ -151,10 +155,12 @@ class RecordingUnitOfWork:
         calls: list[str],
         sessions: RecordingSessions,
         events: RecordingEvents,
+        contexts: InMemorySessionContextRepository,
     ) -> None:
         self._calls = calls
         self.sessions = sessions
         self.events = events
+        self.contexts = contexts
 
     def __enter__(self):
         self._calls.append("enter")
@@ -182,6 +188,7 @@ def recording_service(
         calls,
         RecordingSessions(calls, monitoring_session),
         RecordingEvents(calls, resolved=resolved, accepted=accepted),
+        InMemorySessionContextRepository(),
     )
     return (
         EventIngestionService(lambda: uow, clock=lambda: clock_time),
@@ -384,8 +391,9 @@ def test_replay_returns_already_processed_with_original_received_at() -> None:
     sessions = InMemorySessionRepository()
     sessions.add(session())
     events = InMemoryEventRepository()
+    contexts = InMemorySessionContextRepository()
     service = EventIngestionService(
-        lambda: InMemoryUnitOfWork(sessions, events),
+        lambda: InMemoryUnitOfWork(sessions, events, contexts),
         clock=lambda: next(times),
     )
 
@@ -407,8 +415,9 @@ def test_replay_remains_processed_after_session_completes_before_event_time() ->
     sessions = InMemorySessionRepository()
     sessions.add(session())
     events = InMemoryEventRepository()
+    contexts = InMemorySessionContextRepository()
     service = EventIngestionService(
-        lambda: InMemoryUnitOfWork(sessions, events),
+        lambda: InMemoryUnitOfWork(sessions, events, contexts),
         clock=lambda: next(times),
     )
 

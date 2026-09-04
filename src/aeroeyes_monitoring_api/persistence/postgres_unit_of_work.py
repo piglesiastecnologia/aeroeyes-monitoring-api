@@ -7,6 +7,9 @@ from sqlalchemy.orm import Session
 from aeroeyes_monitoring_api.persistence.postgres_event_repository import (
     PostgresEventRepository,
 )
+from aeroeyes_monitoring_api.persistence.postgres_session_context_repository import (
+    PostgresSessionContextRepository,
+)
 from aeroeyes_monitoring_api.persistence.postgres_session_repository import (
     PostgresSessionRepository,
 )
@@ -18,6 +21,7 @@ class PostgresUnitOfWork:
         self._session: Session | None = None
         self._sessions: PostgresSessionRepository | None = None
         self._events: PostgresEventRepository | None = None
+        self._contexts: PostgresSessionContextRepository | None = None
 
     @property
     def sessions(self) -> PostgresSessionRepository:
@@ -31,6 +35,12 @@ class PostgresUnitOfWork:
             raise RuntimeError("UnitOfWork is not active")
         return self._events
 
+    @property
+    def contexts(self) -> PostgresSessionContextRepository:
+        if self._contexts is None:
+            raise RuntimeError("UnitOfWork is not active")
+        return self._contexts
+
     def __enter__(self) -> Self:
         if self._session is not None:
             raise RuntimeError("UnitOfWork is already active")
@@ -39,6 +49,7 @@ class PostgresUnitOfWork:
         self._session = session
         self._sessions = PostgresSessionRepository(session)
         self._events = PostgresEventRepository(session)
+        self._contexts = PostgresSessionContextRepository(session)
         return self
 
     def __exit__(
@@ -58,6 +69,7 @@ class PostgresUnitOfWork:
                 self._session = None
                 self._sessions = None
                 self._events = None
+                self._contexts = None
 
     def commit(self) -> None:
         self._require_session().commit()
