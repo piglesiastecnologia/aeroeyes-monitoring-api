@@ -88,6 +88,7 @@ def test_create_app_preserves_openapi_and_swagger_routes(app: FastAPI) -> None:
         "/sessions/{session_id}",
         "/sessions/{session_id}/complete",
         "/sessions/{session_id}/events",
+        "/sessions/{session_id}/context",
     }
     assert {getattr(route, "path", None) for route in app.routes} >= {
         "/docs",

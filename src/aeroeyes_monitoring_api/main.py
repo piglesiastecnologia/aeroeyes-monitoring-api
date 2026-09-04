@@ -6,6 +6,9 @@ from sqlalchemy.engine import Engine
 
 from aeroeyes_monitoring_api.api.events import create_events_router
 from aeroeyes_monitoring_api.api.health import router as health_router
+from aeroeyes_monitoring_api.api.session_contexts import (
+    create_session_contexts_router,
+)
 from aeroeyes_monitoring_api.api.sessions import create_sessions_router
 from aeroeyes_monitoring_api.event_ingestion_service import EventIngestionService
 from aeroeyes_monitoring_api.persistence.database import (
@@ -16,6 +19,7 @@ from aeroeyes_monitoring_api.persistence.database import (
 from aeroeyes_monitoring_api.persistence.postgres_unit_of_work import (
     PostgresUnitOfWork,
 )
+from aeroeyes_monitoring_api.session_context_service import SessionContextService
 from aeroeyes_monitoring_api.session_service import SessionService
 from aeroeyes_monitoring_api.unit_of_work import UnitOfWork
 
@@ -57,8 +61,10 @@ def create_app(
 
     session_service = SessionService(unit_of_work_factory)
     event_ingestion_service = EventIngestionService(unit_of_work_factory)
+    session_context_service = SessionContextService(unit_of_work_factory)
 
     app.include_router(health_router)
     app.include_router(create_sessions_router(session_service))
     app.include_router(create_events_router(event_ingestion_service))
+    app.include_router(create_session_contexts_router(session_context_service))
     return app
