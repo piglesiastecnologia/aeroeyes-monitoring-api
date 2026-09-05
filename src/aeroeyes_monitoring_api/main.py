@@ -1,7 +1,8 @@
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.engine import Engine
 
 from aeroeyes_monitoring_api.api.events import create_events_router
@@ -10,6 +11,7 @@ from aeroeyes_monitoring_api.api.session_contexts import (
     create_session_contexts_router,
 )
 from aeroeyes_monitoring_api.api.sessions import create_sessions_router
+from aeroeyes_monitoring_api.config import cors_allowed_origins_from_env
 from aeroeyes_monitoring_api.event_ingestion_service import EventIngestionService
 from aeroeyes_monitoring_api.persistence.database import (
     create_database_engine,
@@ -28,6 +30,7 @@ def create_app(
     *,
     database_url: str | None = None,
     unit_of_work_factory: Callable[[], UnitOfWork] | None = None,
+    cors_allowed_origins: Sequence[str] | None = None,
 ) -> FastAPI:
     if database_url is not None and unit_of_work_factory is not None:
         raise ValueError(
@@ -58,6 +61,20 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.database_engine = engine
+
+    resolved_cors_allowed_origins = (
+        cors_allowed_origins_from_env()
+        if cors_allowed_origins is None
+        else cors_allowed_origins
+    )
+    if resolved_cors_allowed_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=resolved_cors_allowed_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=["Content-Type"],
+        )
 
     session_service = SessionService(unit_of_work_factory)
     event_ingestion_service = EventIngestionService(unit_of_work_factory)

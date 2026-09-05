@@ -26,9 +26,13 @@ Run the API locally:
 
 ```bash
 export DATABASE_URL="postgresql+psycopg://aeroeyes:local-password@localhost:5432/aeroeyes"
+export CORS_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
 python -m alembic upgrade head
 python -m uvicorn aeroeyes_monitoring_api.main:create_app --factory --reload
 ```
+
+`CORS_ALLOWED_ORIGINS` is a comma-separated list of explicit browser origins.
+No origin, including localhost, is enabled implicitly.
 
 The shallow liveness endpoint is available at `GET /health`:
 
