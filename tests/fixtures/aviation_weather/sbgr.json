@@ -1,0 +1,21 @@
+[
+  {
+    "icaoId": "SBGR",
+    "obsTime": 1788746400,
+    "temp": 11,
+    "dewp": 9,
+    "wdir": 160,
+    "wspd": 8,
+    "visib": "6+",
+    "altim": 1025,
+    "metarType": "METAR",
+    "rawOb": "METAR SBGR 070200Z 16008KT 9999 FEW013 BKN020 OVC030 11/09 Q1025",
+    "cover": "OVC",
+    "clouds": [
+      {"cover": "FEW", "base": 1300},
+      {"cover": "BKN", "base": 2000},
+      {"cover": "OVC", "base": 3000}
+    ],
+    "fltCat": "MVFR"
+  }
+]

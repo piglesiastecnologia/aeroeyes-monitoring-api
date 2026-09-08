@@ -1,0 +1,18 @@
+[
+  {
+    "icaoId": "KJFK",
+    "obsTime": 1788745860,
+    "temp": 18.9,
+    "dewp": 15.6,
+    "wdir": 0,
+    "wspd": 0,
+    "visib": "10+",
+    "altim": 1017.7,
+    "metarType": "METAR",
+    "rawOb": "METAR KJFK 070151Z 00000KT 10SM FEW027 19/16 A3005 RMK AO2 SLP175 T01890156 $",
+    "clouds": [
+      {"cover": "FEW", "base": 2700}
+    ],
+    "fltCat": "VFR"
+  }
+]
