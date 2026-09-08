@@ -89,6 +89,7 @@ def test_create_app_preserves_openapi_and_swagger_routes(app: FastAPI) -> None:
         "/sessions/{session_id}/complete",
         "/sessions/{session_id}/events",
         "/sessions/{session_id}/context",
+        "/sessions/{session_id}/weather",
     }
     assert {getattr(route, "path", None) for route in app.routes} >= {
         "/docs",
@@ -105,3 +106,63 @@ def test_create_app_rejects_ambiguous_persistence_composition() -> None:
             database_url="postgresql+psycopg://runtime.example/aeroeyes",
             unit_of_work_factory=lambda: None,
         )
+
+
+def test_application_owned_weather_client_is_lazy_and_closed_on_shutdown(
+    monkeypatch,
+) -> None:
+    class HttpClientSpy:
+        def __init__(self, *, timeout: float) -> None:
+            self.timeout = timeout
+            self.get_calls = 0
+            self.closed = False
+
+        def get(self, *args, **kwargs):
+            self.get_calls += 1
+            raise AssertionError("unexpected outbound request")
+
+        def close(self) -> None:
+            self.closed = True
+
+    created: list[HttpClientSpy] = []
+
+    def create_http_client(*, timeout: float) -> HttpClientSpy:
+        client = HttpClientSpy(timeout=timeout)
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(application.httpx, "Client", create_http_client)
+
+    app = application.create_app(unit_of_work_factory=lambda: None)
+    assert len(created) == 1
+    assert created[0].timeout == application.AVIATION_WEATHER_TIMEOUT_SECONDS
+    assert created[0].get_calls == 0
+
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
+        assert created[0].get_calls == 0
+        assert not created[0].closed
+
+    assert created[0].closed
+
+
+def test_injected_weather_client_remains_caller_owned() -> None:
+    class InjectedClient:
+        close_calls = 0
+
+        def get_metar(self, station_icao: str):
+            raise AssertionError("unexpected outbound request")
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    injected = InjectedClient()
+    app = application.create_app(
+        unit_of_work_factory=lambda: None,
+        aviation_weather_client=injected,
+    )
+
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
+
+    assert injected.close_calls == 0

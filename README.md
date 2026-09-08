@@ -96,6 +96,21 @@ completed session and preserve its original `ended_at` value.
 Sessions are stored in PostgreSQL and remain available across application
 restarts and multiple application instances using the same database.
 
+## Current session weather
+
+Retrieve the current METAR context for the departure and destination airports
+configured on a monitoring session:
+
+```http
+GET /sessions/{session_id}/weather
+```
+
+The API calls AviationWeather.gov server-side and returns only the AeroEyes
+normalized weather contract; the frontend never calls the provider directly.
+This resource is current operational context, including for completed sessions.
+It is not historical weather, is neither persisted nor cached, and is not an
+input to attention-event or fatigue classification.
+
 ## Attention-event ingestion
 
 Submit an immutable attention event to its monitoring session:
