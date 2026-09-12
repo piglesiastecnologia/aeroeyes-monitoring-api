@@ -20,6 +20,11 @@ class EventAcceptance:
 
 
 class EventRepository(Protocol):
+    def latest_for_session(
+        self,
+        session_id: UUID,
+    ) -> IngestedAttentionEvent | None: ...
+
     def resolve_existing(
         self,
         candidate: IngestedAttentionEvent,
@@ -66,6 +71,22 @@ class InMemoryEventRepository:
     ) -> EventAcceptance | None:
         with self._lock:
             return self._resolve_existing_unlocked(candidate)
+
+    def latest_for_session(
+        self,
+        session_id: UUID,
+    ) -> IngestedAttentionEvent | None:
+        with self._lock:
+            candidates = (
+                event
+                for event in self._events.values()
+                if event.session_id == session_id
+            )
+            return max(
+                candidates,
+                key=lambda event: (event.occurred_at, event.event_id.int),
+                default=None,
+            )
 
     def accept(self, candidate: IngestedAttentionEvent) -> EventAcceptance:
         with self._lock:

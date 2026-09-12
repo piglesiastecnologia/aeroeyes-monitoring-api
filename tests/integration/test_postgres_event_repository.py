@@ -73,6 +73,41 @@ def test_first_event_is_accepted_and_persisted(db_session: Session) -> None:
     assert repository.resolve_existing(candidate) is not None
 
 
+def test_latest_for_session_returns_none_without_events(
+    db_session: Session,
+) -> None:
+    add_monitoring_session(db_session)
+
+    assert (
+        PostgresEventRepository(db_session).latest_for_session(SESSION_ID)
+        is None
+    )
+
+
+def test_latest_for_session_uses_semantic_time_then_event_identity(
+    db_session: Session,
+) -> None:
+    add_monitoring_session(db_session)
+    repository = PostgresEventRepository(db_session)
+    earlier = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000011"),
+        occurred_at=OCCURRED_AT - timedelta(seconds=1),
+    )
+    tied_lower = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000012"),
+    )
+    tied_higher = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000013"),
+        state=AttentionState.CRITICAL,
+    )
+
+    repository.accept(tied_lower)
+    repository.accept(tied_higher)
+    repository.accept(earlier)
+
+    assert repository.latest_for_session(SESSION_ID) == tied_higher
+
+
 def test_resolve_existing_replay_preserves_original_received_at(
     db_session: Session,
 ) -> None:

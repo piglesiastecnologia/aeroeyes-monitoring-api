@@ -6,6 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.engine import Engine
 
+from aeroeyes_monitoring_api.api.attention_states import (
+    create_attention_states_router,
+)
 from aeroeyes_monitoring_api.api.events import create_events_router
 from aeroeyes_monitoring_api.api.health import router as health_router
 from aeroeyes_monitoring_api.api.session_contexts import (
@@ -23,6 +26,9 @@ from aeroeyes_monitoring_api.persistence.database import (
 )
 from aeroeyes_monitoring_api.persistence.postgres_unit_of_work import (
     PostgresUnitOfWork,
+)
+from aeroeyes_monitoring_api.session_attention_state_service import (
+    SessionAttentionStateService,
 )
 from aeroeyes_monitoring_api.session_context_service import SessionContextService
 from aeroeyes_monitoring_api.session_service import SessionService
@@ -100,6 +106,9 @@ def create_app(
 
     session_service = SessionService(unit_of_work_factory)
     event_ingestion_service = EventIngestionService(unit_of_work_factory)
+    session_attention_state_service = SessionAttentionStateService(
+        unit_of_work_factory
+    )
     session_context_service = SessionContextService(unit_of_work_factory)
     session_weather_service = SessionWeatherService(
         unit_of_work_factory,
@@ -109,6 +118,9 @@ def create_app(
     app.include_router(health_router)
     app.include_router(create_sessions_router(session_service))
     app.include_router(create_events_router(event_ingestion_service))
+    app.include_router(
+        create_attention_states_router(session_attention_state_service)
+    )
     app.include_router(create_session_contexts_router(session_context_service))
     app.include_router(create_weather_router(session_weather_service))
     return app

@@ -48,6 +48,46 @@ def test_first_candidate_is_created() -> None:
     assert result.event is candidate
 
 
+def test_latest_for_session_returns_none_without_events() -> None:
+    assert InMemoryEventRepository().latest_for_session(SESSION_ID) is None
+
+
+def test_latest_for_session_uses_semantic_time_then_event_identity() -> None:
+    repository = InMemoryEventRepository()
+    earlier = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000011"),
+        occurred_at=OCCURRED_AT - timedelta(seconds=1),
+    )
+    tied_lower = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000012"),
+    )
+    tied_higher = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000013"),
+        state=AttentionState.CRITICAL,
+    )
+
+    repository.accept(tied_lower)
+    repository.accept(tied_higher)
+    repository.accept(earlier)
+
+    assert repository.latest_for_session(SESSION_ID) == tied_higher
+
+
+def test_latest_for_session_does_not_cross_session_boundary() -> None:
+    repository = InMemoryEventRepository()
+    owned = event()
+    other = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000020"),
+        session_id=OTHER_SESSION_ID,
+        occurred_at=OCCURRED_AT + timedelta(minutes=1),
+    )
+    repository.accept(owned)
+    repository.accept(other)
+
+    assert repository.latest_for_session(SESSION_ID) == owned
+    assert repository.latest_for_session(OTHER_SESSION_ID) == other
+
+
 def test_replay_returns_original_event_and_received_at() -> None:
     repository = InMemoryEventRepository()
     original = event()

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -35,6 +36,21 @@ class PostgresEventRepository:
             return None
 
         return _resolve_existing_event(_record_to_domain(record), candidate)
+
+    def latest_for_session(
+        self,
+        session_id: UUID,
+    ) -> IngestedAttentionEvent | None:
+        record = self._session.scalar(
+            select(AttentionEventRecord)
+            .where(AttentionEventRecord.session_id == session_id)
+            .order_by(
+                AttentionEventRecord.occurred_at.desc(),
+                AttentionEventRecord.event_id.desc(),
+            )
+            .limit(1)
+        )
+        return None if record is None else _record_to_domain(record)
 
     def accept(self, candidate: IngestedAttentionEvent) -> EventAcceptance:
         statement = (
