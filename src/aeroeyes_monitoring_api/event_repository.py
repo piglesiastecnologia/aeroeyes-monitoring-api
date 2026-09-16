@@ -25,6 +25,12 @@ class EventRepository(Protocol):
         session_id: UUID,
     ) -> IngestedAttentionEvent | None: ...
 
+    def recent_for_session(
+        self,
+        session_id: UUID,
+        limit: int,
+    ) -> tuple[IngestedAttentionEvent, ...]: ...
+
     def resolve_existing(
         self,
         candidate: IngestedAttentionEvent,
@@ -86,6 +92,25 @@ class InMemoryEventRepository:
                 candidates,
                 key=lambda event: (event.occurred_at, event.event_id.int),
                 default=None,
+            )
+
+    def recent_for_session(
+        self,
+        session_id: UUID,
+        limit: int,
+    ) -> tuple[IngestedAttentionEvent, ...]:
+        with self._lock:
+            candidates = (
+                event
+                for event in self._events.values()
+                if event.session_id == session_id
+            )
+            return tuple(
+                sorted(
+                    candidates,
+                    key=lambda event: (event.occurred_at, event.event_id.int),
+                    reverse=True,
+                )[:limit]
             )
 
     def accept(self, candidate: IngestedAttentionEvent) -> EventAcceptance:

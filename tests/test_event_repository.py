@@ -88,6 +88,37 @@ def test_latest_for_session_does_not_cross_session_boundary() -> None:
     assert repository.latest_for_session(OTHER_SESSION_ID) == other
 
 
+def test_recent_for_session_orders_by_semantic_time_then_event_identity() -> None:
+    repository = InMemoryEventRepository()
+    earlier = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000011"),
+        occurred_at=OCCURRED_AT - timedelta(seconds=1),
+    )
+    tied_lower = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000012"),
+    )
+    tied_higher = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000013"),
+        state=AttentionState.CRITICAL,
+    )
+    foreign = event(
+        event_id=UUID("01890f3d-2d00-7000-8000-000000000014"),
+        session_id=OTHER_SESSION_ID,
+        occurred_at=OCCURRED_AT + timedelta(seconds=1),
+    )
+    for candidate in (earlier, tied_lower, tied_higher, foreign):
+        repository.accept(candidate)
+
+    assert repository.recent_for_session(SESSION_ID, 2) == (
+        tied_higher,
+        tied_lower,
+    )
+
+
+def test_recent_for_session_returns_empty_tuple_without_events() -> None:
+    assert InMemoryEventRepository().recent_for_session(SESSION_ID, 10) == ()
+
+
 def test_replay_returns_original_event_and_received_at() -> None:
     repository = InMemoryEventRepository()
     original = event()

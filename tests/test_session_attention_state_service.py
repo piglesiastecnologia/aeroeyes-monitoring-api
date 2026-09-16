@@ -77,6 +77,15 @@ def test_existing_session_returns_latest_event() -> None:
     assert result.event_id == EVENT_ID
 
 
+def test_existing_session_returns_recent_events() -> None:
+    result = build_service(include_event=True).get_recent_events(
+        SESSION_ID,
+        limit=10,
+    )
+
+    assert tuple(event.event_id for event in result) == (EVENT_ID,)
+
+
 def test_unknown_session_is_rejected_before_event_read() -> None:
     with pytest.raises(SessionNotFoundError):
         build_service(include_session=False).get_latest_event(SESSION_ID)

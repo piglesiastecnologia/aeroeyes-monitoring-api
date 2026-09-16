@@ -52,6 +52,22 @@ class PostgresEventRepository:
         )
         return None if record is None else _record_to_domain(record)
 
+    def recent_for_session(
+        self,
+        session_id: UUID,
+        limit: int,
+    ) -> tuple[IngestedAttentionEvent, ...]:
+        records = self._session.scalars(
+            select(AttentionEventRecord)
+            .where(AttentionEventRecord.session_id == session_id)
+            .order_by(
+                AttentionEventRecord.occurred_at.desc(),
+                AttentionEventRecord.event_id.desc(),
+            )
+            .limit(limit)
+        )
+        return tuple(_record_to_domain(record) for record in records)
+
     def accept(self, candidate: IngestedAttentionEvent) -> EventAcceptance:
         statement = (
             insert(AttentionEventRecord)

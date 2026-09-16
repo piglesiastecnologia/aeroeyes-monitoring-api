@@ -133,6 +133,24 @@ Event storage and event-ID arbitration use PostgreSQL. Session validation and
 event acceptance share the transaction owned by a per-operation unit of work,
 so persistence and replay protection do not depend on process-local locks.
 
+## Attention read model
+
+Read the latest semantic attention transition for a session:
+
+```http
+GET /sessions/{session_id}/attention-state
+```
+
+Read a bounded recent-event window, newest semantic event first:
+
+```http
+GET /sessions/{session_id}/events?limit=10
+```
+
+`limit` defaults to `10` and accepts values from `1` through `50`. Event eye
+fields describe the observation captured at that event transition; they are not
+continuous live camera telemetry.
+
 ## Tests
 
 Run the complete test suite:

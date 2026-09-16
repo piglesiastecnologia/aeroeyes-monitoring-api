@@ -24,3 +24,15 @@ class SessionAttentionStateService:
                 raise SessionNotFoundError(session_id)
 
             return uow.events.latest_for_session(session_id)
+
+    def get_recent_events(
+        self,
+        session_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[IngestedAttentionEvent, ...]:
+        with self._unit_of_work_factory() as uow:
+            if uow.sessions.get(session_id) is None:
+                raise SessionNotFoundError(session_id)
+
+            return uow.events.recent_for_session(session_id, limit)

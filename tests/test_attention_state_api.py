@@ -95,6 +95,57 @@ def test_attention_state_isolated_by_session(app: FastAPI) -> None:
     assert second_response.json()["latest_event"] is None
 
 
+def test_recent_events_are_limited_and_newest_first(app: FastAPI) -> None:
+    event_ids = (
+        "01890f3d-2d00-7000-8000-000000000010",
+        "01890f3d-2d00-7000-8000-000000000020",
+        "01890f3d-2d00-7000-8000-000000000030",
+    )
+    with TestClient(app) as client:
+        session = client.post("/sessions").json()
+        started_at = datetime.fromisoformat(session["started_at"])
+        events_path = f"/sessions/{session['session_id']}/events"
+        for offset, event_id in enumerate(event_ids, start=1):
+            response = client.post(
+                events_path,
+                json=event_body(
+                    event_id,
+                    started_at + timedelta(seconds=offset),
+                ),
+            )
+            assert response.status_code == 201
+
+        response = client.get(f"{events_path}?limit=2")
+
+    assert response.status_code == 200
+    assert response.json()["session_id"] == session["session_id"]
+    assert [event["event_id"] for event in response.json()["events"]] == [
+        event_ids[2],
+        event_ids[1],
+    ]
+
+
+def test_recent_events_preserve_empty_and_not_found_semantics(
+    app: FastAPI,
+) -> None:
+    with TestClient(app) as client:
+        session = client.post("/sessions").json()
+        empty = client.get(f"/sessions/{session['session_id']}/events")
+        missing = client.get(f"/sessions/{uuid7()}/events")
+        invalid_limit = client.get(
+            f"/sessions/{session['session_id']}/events?limit=51"
+        )
+
+    assert empty.status_code == 200
+    assert empty.json() == {
+        "session_id": session["session_id"],
+        "events": [],
+    }
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "SESSION_NOT_FOUND"
+    assert invalid_limit.status_code == 422
+
+
 def test_unknown_session_returns_structured_not_found(app: FastAPI) -> None:
     missing_session_id = uuid7()
 
@@ -121,3 +172,4 @@ def test_malformed_session_id_is_rejected_and_route_is_documented(
 
     assert malformed.status_code == 422
     assert "get" in schema["paths"]["/sessions/{session_id}/attention-state"]
+    assert "get" in schema["paths"]["/sessions/{session_id}/events"]
