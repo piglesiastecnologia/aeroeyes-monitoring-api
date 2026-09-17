@@ -4,9 +4,9 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from fastapi import FastAPI
 
 from aeroeyes_monitoring_api.domain.identity import uuid7
-from aeroeyes_monitoring_api.main import app
 
 
 def valid_body(occurred_at: str) -> dict[str, object]:
@@ -22,7 +22,7 @@ def valid_body(occurred_at: str) -> dict[str, object]:
     }
 
 
-def test_create_replay_and_changed_payload_conflict() -> None:
+def test_create_replay_and_changed_payload_conflict(app: FastAPI) -> None:
     async def exercise() -> None:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -55,7 +55,7 @@ def test_create_replay_and_changed_payload_conflict() -> None:
     asyncio.run(exercise())
 
 
-def test_same_event_id_in_another_existing_session_conflicts() -> None:
+def test_same_event_id_in_another_existing_session_conflicts(app: FastAPI) -> None:
     async def exercise() -> None:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -82,7 +82,7 @@ def test_same_event_id_in_another_existing_session_conflicts() -> None:
     asyncio.run(exercise())
 
 
-def test_unknown_and_malformed_sessions_are_rejected() -> None:
+def test_unknown_and_malformed_sessions_are_rejected(app: FastAPI) -> None:
     async def exercise() -> None:
         body = valid_body(datetime.now(timezone.utc).isoformat())
         transport = httpx.ASGITransport(app=app)
@@ -157,7 +157,7 @@ def invalid_body(case: str, occurred_at: str, session_id: str) -> dict[str, obje
         "numeric_occurred_at",
     ],
 )
-def test_invalid_request_contract_is_rejected(case: str) -> None:
+def test_invalid_request_contract_is_rejected(case: str, app: FastAPI) -> None:
     async def exercise() -> None:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -176,7 +176,7 @@ def test_invalid_request_contract_is_rejected(case: str) -> None:
     asyncio.run(exercise())
 
 
-def test_explicit_null_eye_fields_are_accepted() -> None:
+def test_explicit_null_eye_fields_are_accepted(app: FastAPI) -> None:
     async def exercise() -> None:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -199,7 +199,7 @@ def test_explicit_null_eye_fields_are_accepted() -> None:
     asyncio.run(exercise())
 
 
-def test_unsupported_schema_version_has_stable_error_code() -> None:
+def test_unsupported_schema_version_has_stable_error_code(app: FastAPI) -> None:
     async def exercise() -> None:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -220,7 +220,7 @@ def test_unsupported_schema_version_has_stable_error_code() -> None:
     asyncio.run(exercise())
 
 
-def test_event_before_session_is_rejected() -> None:
+def test_event_before_session_is_rejected(app: FastAPI) -> None:
     async def exercise() -> None:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -243,7 +243,7 @@ def test_event_before_session_is_rejected() -> None:
     asyncio.run(exercise())
 
 
-def test_completed_session_accepts_valid_late_event() -> None:
+def test_completed_session_accepts_valid_late_event(app: FastAPI) -> None:
     async def exercise() -> None:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(

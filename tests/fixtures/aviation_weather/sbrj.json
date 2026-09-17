@@ -1,0 +1,21 @@
+[
+  {
+    "icaoId": "SBRJ",
+    "obsTime": 1788748200,
+    "temp": 16,
+    "dewp": 15,
+    "wdir": 190,
+    "wspd": 13,
+    "visib": 2.49,
+    "altim": 1022,
+    "wxString": "-RA BR",
+    "metarType": "SPECI",
+    "rawOb": "SPECI SBRJ 070230Z 19013KT 4000 -RA BR FEW008 BKN010 OVC025 16/15 Q1022 RERA",
+    "clouds": [
+      {"cover": "FEW", "base": 800},
+      {"cover": "BKN", "base": 1000},
+      {"cover": "OVC", "base": 2500}
+    ],
+    "fltCat": "IFR"
+  }
+]

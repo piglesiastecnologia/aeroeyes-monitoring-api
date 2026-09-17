@@ -3,16 +3,16 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 import httpx
+from fastapi import FastAPI
 
 from aeroeyes_monitoring_api.domain.identity import uuid7
-from aeroeyes_monitoring_api.main import app
 
 
 def parse_timestamp(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def test_session_lifecycle() -> None:
+def test_session_lifecycle(app: FastAPI) -> None:
     async def exercise_lifecycle() -> None:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -58,7 +58,7 @@ def test_session_lifecycle() -> None:
     asyncio.run(exercise_lifecycle())
 
 
-def test_unknown_session_returns_404() -> None:
+def test_unknown_session_returns_404(app: FastAPI) -> None:
     async def request_unknown_session() -> None:
         session_id = uuid7()
         transport = httpx.ASGITransport(app=app)
@@ -79,7 +79,7 @@ def test_unknown_session_returns_404() -> None:
     asyncio.run(request_unknown_session())
 
 
-def test_malformed_session_id_returns_422() -> None:
+def test_malformed_session_id_returns_422(app: FastAPI) -> None:
     async def request_malformed_session() -> None:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(

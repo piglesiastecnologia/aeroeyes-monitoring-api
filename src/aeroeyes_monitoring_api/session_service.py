@@ -8,7 +8,7 @@ from aeroeyes_monitoring_api.domain.monitoring_session import (
     MonitoringSession,
     SessionStatus,
 )
-from aeroeyes_monitoring_api.session_repository import SessionRepository
+from aeroeyes_monitoring_api.unit_of_work import UnitOfWork
 
 
 class SessionNotFoundError(LookupError):
@@ -18,11 +18,11 @@ class SessionNotFoundError(LookupError):
 class SessionService:
     def __init__(
         self,
-        repository: SessionRepository,
+        unit_of_work_factory: Callable[[], UnitOfWork],
         clock: Callable[[], datetime] = utc_now,
         session_id_factory: Callable[[], UUID] = uuid7,
     ) -> None:
-        self._repository = repository
+        self._unit_of_work_factory = unit_of_work_factory
         self._clock = clock
         self._session_id_factory = session_id_factory
 
@@ -32,17 +32,22 @@ class SessionService:
             status=SessionStatus.ACTIVE,
             started_at=self._clock(),
         )
-        self._repository.add(session)
+        with self._unit_of_work_factory() as uow:
+            uow.sessions.add(session)
+            uow.commit()
         return session
 
     def get_session(self, session_id: UUID) -> MonitoringSession:
-        session = self._repository.get(session_id)
-        if session is None:
-            raise SessionNotFoundError(session_id)
-        return session
+        with self._unit_of_work_factory() as uow:
+            session = uow.sessions.get(session_id)
+            if session is None:
+                raise SessionNotFoundError(session_id)
+            return session
 
     def complete_session(self, session_id: UUID) -> MonitoringSession:
-        session = self._repository.complete(session_id, self._clock())
-        if session is None:
-            raise SessionNotFoundError(session_id)
-        return session
+        with self._unit_of_work_factory() as uow:
+            session = uow.sessions.complete(session_id, self._clock())
+            if session is None:
+                raise SessionNotFoundError(session_id)
+            uow.commit()
+            return session

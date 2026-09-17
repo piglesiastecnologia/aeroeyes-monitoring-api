@@ -39,6 +39,12 @@ class InMemorySessionRepository:
         with self._lock:
             return self._sessions.get(session_id)
 
+    def get_for_event_ingestion(
+        self,
+        session_id: UUID,
+    ) -> MonitoringSession | None:
+        return self.get(session_id)
+
     def complete(
         self,
         session_id: UUID,
