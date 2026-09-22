@@ -1,160 +1,145 @@
 # AeroEyes Monitoring API
 
-Monitoring API for the AeroEyes Distributed Monitoring Platform, responsible
-for monitoring sessions, attention-event ingestion, and operational context.
+[Português](README.md) · [English](README.en.md)
 
-## Requirements
+Backend REST do **AeroEyes Monitoring System**. A API mantém sessões e contexto
+de voo, recebe transições semânticas de atenção, oferece modelos de leitura para
+o Web e integra dados METAR da AviationWeather.gov.
 
-- Python 3.11 or newer
+## Papel no MVP da PUC-Rio
 
-## Local setup
+O projeto segue o **cenário 1.1** da Sprint 3:
 
-Create and activate a virtual environment:
+```text
+AeroEyes Web → Monitoring API → AviationWeather Data API
+                            ↘ PostgreSQL
+```
+
+Este repositório é o backend desenvolvido e um dos dois repositórios públicos
+da entrega. O Attention Core é uma extensão opcional: ele pode publicar eventos
+na API, mas não é necessário para provar o fluxo Web → API → API externa.
+
+O diagrama canônico e a matriz completa de evidências ficam no repositório
+[`aeroeyes-web`](https://github.com/piglesiastecnologia/aeroeyes-web), em
+`docs/architecture` e `docs/delivery`.
+
+## Responsabilidades
+
+- criar, consultar e concluir `MonitoringSession`;
+- manter um único contexto de voo por sessão;
+- persistir sessões, contexto e eventos em PostgreSQL;
+- arbitrar ingestão idempotente de eventos de atenção;
+- disponibilizar estado atual e janela recente de eventos;
+- consultar METAR no servidor e devolver um contrato normalizado;
+- expor CORS apenas para origens explicitamente configuradas.
+
+## Contratos HTTP
+
+| Método | Rota | Responsabilidade |
+| --- | --- | --- |
+| `GET` | `/health` | Liveness do serviço |
+| `POST` | `/sessions` | Criar sessão ativa |
+| `GET` | `/sessions/{session_id}` | Consultar sessão |
+| `POST` | `/sessions/{session_id}/complete` | Concluir sessão de forma idempotente |
+| `GET` | `/sessions/{session_id}/context` | Consultar contexto de voo |
+| `PUT` | `/sessions/{session_id}/context` | Substituir integralmente o contexto |
+| `DELETE` | `/sessions/{session_id}/context` | Remover contexto |
+| `GET` | `/sessions/{session_id}/weather` | Consultar METAR atual normalizado |
+| `POST` | `/sessions/{session_id}/events` | Ingerir evento de atenção |
+| `GET` | `/sessions/{session_id}/attention-state` | Ler a última transição semântica |
+| `GET` | `/sessions/{session_id}/events?limit=10` | Ler eventos recentes, do mais novo ao mais antigo |
+
+A documentação interativa fica em `/docs` quando a aplicação está em execução.
+
+## Persistência e consistência
+
+PostgreSQL é a persistência obrigatória do runtime. `DATABASE_URL` deve usar a
+URL síncrona do SQLAlchemy com Psycopg 3; não existe fallback automático para
+memória.
+
+Sessão, contexto e eventos são validados e persistidos dentro de unidades de
+trabalho transacionais. Eventos são imutáveis: o primeiro envio retorna
+`201 Created`; uma repetição idêntica retorna `200 OK` como já processada; a
+reutilização do mesmo `event_id` com conteúdo ou sessão diferente retorna
+`409 Conflict`.
+
+Uma sessão concluída aceita apenas eventos atrasados cujo `occurred_at` esteja
+dentro do intervalo inclusivo de início e término da própria sessão.
+
+## Integração AviationWeather
+
+A rota de clima chama no backend o recurso público
+`GET https://aviationweather.gov/api/data/metar`. O navegador nunca acessa o
+provedor diretamente. A API valida estação e payload, traduz falhas do provedor
+e entrega ao Web apenas o contrato AeroEyes normalizado.
+
+O resultado representa clima operacional atual, inclusive para sessões já
+concluídas. Ele não é histórico, não é persistido, não possui cache no MVP e
+não participa da classificação de atenção.
+
+Dados meteorológicos públicos não exigem conta ou chave. A documentação do
+provedor registra limite de requisições e ausência de CORS para chamadas
+diretas do browser: <https://aviationweather.gov/data/api/>.
+
+## Execução local
+
+Requisitos:
+
+- Python 3.11 ou superior;
+- PostgreSQL disponível.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-Install the package with its test and migration dependencies:
-
-```bash
 python -m pip install -e ".[test,migration]"
-```
 
-Run the API locally:
-
-```bash
 export DATABASE_URL="postgresql+psycopg://aeroeyes:local-password@localhost:5432/aeroeyes"
 export CORS_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+
 python -m alembic upgrade head
 python -m uvicorn aeroeyes_monitoring_api.main:create_app --factory --reload
 ```
 
-`CORS_ALLOWED_ORIGINS` is a comma-separated list of explicit browser origins.
-No origin, including localhost, is enabled implicitly.
+`CORS_ALLOWED_ORIGINS` recebe uma lista separada por vírgulas. Nenhuma origem,
+nem mesmo localhost, é liberada implicitamente.
 
-The shallow liveness endpoint is available at `GET /health`:
-
-```json
-{
-  "status": "ok",
-  "service": "aeroeyes-monitoring-api"
-}
-```
-
-## PostgreSQL database foundation
-
-PostgreSQL is the runtime persistence store. The initial schema contains only
-monitoring sessions and attention events. Normal application startup requires
-`DATABASE_URL`; there is no automatic fallback to in-memory persistence.
-
-Set `DATABASE_URL` when running migrations, using the synchronous Psycopg 3
-SQLAlchemy URL format:
-
-```bash
-export DATABASE_URL="postgresql+psycopg://aeroeyes:local-password@localhost:5432/aeroeyes"
-```
-
-Use local development credentials and do not commit secrets or `.env` files.
-Apply or revert the schema with Alembic:
+## Migrações
 
 ```bash
 python -m alembic upgrade head
 python -m alembic downgrade base
 ```
 
-## Monitoring sessions
+Use credenciais locais e nunca versione segredos ou arquivos `.env`.
 
-Create an active monitoring session with no request body:
+## Docker e composição
 
-```http
-POST /sessions
+O `Dockerfile` da raiz constrói a imagem usada pelo Compose do
+`aeroeyes-web`. Nesse fluxo, PostgreSQL fica saudável, o serviço one-shot
+`migrate` aplica `alembic upgrade head` e só então a API é iniciada.
+
+Build isolado:
+
+```bash
+docker build -t aeroeyes-monitoring-api .
 ```
 
-The API returns `201 Created`, a `Location` header, and the new session:
+O repositório Web é a entrada canônica para subir todo o ambiente.
 
-```json
-{
-  "session_id": "019...",
-  "status": "ACTIVE",
-  "started_at": "2026-08-27T12:00:00Z",
-  "ended_at": null
-}
-```
-
-Retrieve or complete the session using its UUIDv7 identity:
-
-```http
-GET /sessions/{session_id}
-POST /sessions/{session_id}/complete
-```
-
-Completion is idempotent. Repeated completion requests return the existing
-completed session and preserve its original `ended_at` value.
-
-Sessions are stored in PostgreSQL and remain available across application
-restarts and multiple application instances using the same database.
-
-## Current session weather
-
-Retrieve the current METAR context for the departure and destination airports
-configured on a monitoring session:
-
-```http
-GET /sessions/{session_id}/weather
-```
-
-The API calls AviationWeather.gov server-side and returns only the AeroEyes
-normalized weather contract; the frontend never calls the provider directly.
-This resource is current operational context, including for completed sessions.
-It is not historical weather, is neither persisted nor cached, and is not an
-input to attention-event or fatigue classification.
-
-## Attention-event ingestion
-
-Submit an immutable attention event to its monitoring session:
-
-```http
-POST /sessions/{session_id}/events
-```
-
-The producer owns the UUIDv7 `event_id` and event occurrence time. The API owns
-`received_at`. A first ingestion returns `201 Created`; an identical replay of
-the same event in the same session returns `200 OK` with
-`status: "already_processed"` and the original stored event. Reusing an event ID
-with changed semantics or another session returns `409 Conflict`.
-
-Events are append-only. A completed session still accepts a late-delivered event
-when its producer timestamp falls within the session's inclusive start/end
-window.
-
-Event storage and event-ID arbitration use PostgreSQL. Session validation and
-event acceptance share the transaction owned by a per-operation unit of work,
-so persistence and replay protection do not depend on process-local locks.
-
-## Attention read model
-
-Read the latest semantic attention transition for a session:
-
-```http
-GET /sessions/{session_id}/attention-state
-```
-
-Read a bounded recent-event window, newest semantic event first:
-
-```http
-GET /sessions/{session_id}/events?limit=10
-```
-
-`limit` defaults to `10` and accepts values from `1` through `50`. Event eye
-fields describe the observation captured at that event transition; they are not
-continuous live camera telemetry.
-
-## Tests
-
-Run the complete test suite:
+## Validação
 
 ```bash
 python -m pytest
+python -m pip check
+python -m compileall -q src
 ```
+
+O CI executa migrações e testes contra PostgreSQL real, verifica dependências e
+compilação e constrói a imagem Docker.
+
+## Limites declarados
+
+- MVP acadêmico e experimental; não é software aeronáutico ou médico certificado.
+- METAR atual não é armazenado como histórico.
+- Eventos representam transições semânticas, não vídeo, landmarks ou EAR bruto.
+- A API não comprova que o produtor local continua ativo após o último evento recebido.
