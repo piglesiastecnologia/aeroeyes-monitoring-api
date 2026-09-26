@@ -1,28 +1,30 @@
 # AeroEyes Monitoring API
 
-Monitoring API for the AeroEyes Distributed Monitoring Platform, responsible
-for monitoring sessions, attention-event ingestion, and operational context.
+[Português](README.md) · [English](README.en.md)
 
-## Requirements
+API de monitoramento da plataforma distribuída AeroEyes, responsável pelas
+sessões de monitoramento, ingestão de eventos de atenção e contexto operacional.
 
-- Python 3.11 or newer
+## Requisitos
 
-## Local setup
+- Python 3.11 ou mais recente
 
-Create and activate a virtual environment:
+## Configuração local
+
+Crie e ative um ambiente virtual:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-Install the package with its test and migration dependencies:
+Instale o pacote com as dependências de testes e migrações:
 
 ```bash
 python -m pip install -e ".[test,migration]"
 ```
 
-Run the API locally:
+Execute a API localmente:
 
 ```bash
 export DATABASE_URL="postgresql+psycopg://aeroeyes:local-password@localhost:5432/aeroeyes"
@@ -31,10 +33,11 @@ python -m alembic upgrade head
 python -m uvicorn aeroeyes_monitoring_api.main:create_app --factory --reload
 ```
 
-`CORS_ALLOWED_ORIGINS` is a comma-separated list of explicit browser origins.
-No origin, including localhost, is enabled implicitly.
+`CORS_ALLOWED_ORIGINS` recebe uma lista, separada por vírgulas, de origens
+explícitas permitidas no navegador. Nenhuma origem, incluindo localhost, é
+habilitada implicitamente.
 
-The shallow liveness endpoint is available at `GET /health`:
+O endpoint simples de disponibilidade está em `GET /health`:
 
 ```json
 {
@@ -43,36 +46,37 @@ The shallow liveness endpoint is available at `GET /health`:
 }
 ```
 
-## PostgreSQL database foundation
+## Persistência PostgreSQL
 
-PostgreSQL is the runtime persistence store. The initial schema contains only
-monitoring sessions and attention events. Normal application startup requires
-`DATABASE_URL`; there is no automatic fallback to in-memory persistence.
+O PostgreSQL é o armazenamento persistente utilizado em runtime. O schema
+contém sessões de monitoramento, contexto de voo e eventos de atenção. A
+inicialização normal exige `DATABASE_URL`; não existe fallback automático para
+persistência em memória.
 
-Set `DATABASE_URL` when running migrations, using the synchronous Psycopg 3
-SQLAlchemy URL format:
+Defina `DATABASE_URL` ao executar as migrações, usando o formato síncrono do
+SQLAlchemy com Psycopg 3:
 
 ```bash
 export DATABASE_URL="postgresql+psycopg://aeroeyes:local-password@localhost:5432/aeroeyes"
 ```
 
-Use local development credentials and do not commit secrets or `.env` files.
-Apply or revert the schema with Alembic:
+Use credenciais locais de desenvolvimento e não versione segredos ou arquivos
+`.env`. Aplique ou reverta o schema com Alembic:
 
 ```bash
 python -m alembic upgrade head
 python -m alembic downgrade base
 ```
 
-## Monitoring sessions
+## Sessões de monitoramento
 
-Create an active monitoring session with no request body:
+Crie uma sessão ativa sem corpo na requisição:
 
 ```http
 POST /sessions
 ```
 
-The API returns `201 Created`, a `Location` header, and the new session:
+A API retorna `201 Created`, um header `Location` e a nova sessão:
 
 ```json
 {
@@ -83,77 +87,93 @@ The API returns `201 Created`, a `Location` header, and the new session:
 }
 ```
 
-Retrieve or complete the session using its UUIDv7 identity:
+Consulte ou conclua a sessão usando sua identidade UUIDv7:
 
 ```http
 GET /sessions/{session_id}
 POST /sessions/{session_id}/complete
 ```
 
-Completion is idempotent. Repeated completion requests return the existing
-completed session and preserve its original `ended_at` value.
+A conclusão é idempotente. Requisições repetidas retornam a sessão já concluída
+e preservam o valor original de `ended_at`.
 
-Sessions are stored in PostgreSQL and remain available across application
-restarts and multiple application instances using the same database.
+As sessões são armazenadas no PostgreSQL e permanecem disponíveis após o
+reinício da aplicação e entre múltiplas instâncias que utilizem o mesmo banco.
 
-## Current session weather
+## Contexto de voo da sessão
 
-Retrieve the current METAR context for the departure and destination airports
-configured on a monitoring session:
+Consulte, substitua ou remova o contexto operacional associado a uma sessão:
+
+```http
+GET /sessions/{session_id}/context
+PUT /sessions/{session_id}/context
+DELETE /sessions/{session_id}/context
+```
+
+O `PUT` substitui o contexto com número do voo e códigos ICAO de origem e
+destino. O recurso pertence à sessão informada e é persistido no PostgreSQL. A
+remoção retorna `204 No Content` e não conclui nem remove a sessão.
+
+## Meteorologia atual da sessão
+
+Consulte o contexto METAR atual dos aeroportos de origem e destino configurados
+na sessão de monitoramento:
 
 ```http
 GET /sessions/{session_id}/weather
 ```
 
-The API calls AviationWeather.gov server-side and returns only the AeroEyes
-normalized weather contract; the frontend never calls the provider directly.
-This resource is current operational context, including for completed sessions.
-It is not historical weather, is neither persisted nor cached, and is not an
-input to attention-event or fatigue classification.
+A API consulta AviationWeather.gov no servidor e retorna somente o contrato
+meteorológico normalizado do AeroEyes; o frontend não chama o provedor
+diretamente. Esse recurso representa o contexto operacional atual, inclusive
+para sessões concluídas. Ele não oferece histórico, não é persistido nem
+mantido em cache e não participa da classificação de atenção ou fadiga.
 
-## Attention-event ingestion
+## Ingestão de eventos de atenção
 
-Submit an immutable attention event to its monitoring session:
+Envie um evento de atenção imutável para sua sessão de monitoramento:
 
 ```http
 POST /sessions/{session_id}/events
 ```
 
-The producer owns the UUIDv7 `event_id` and event occurrence time. The API owns
-`received_at`. A first ingestion returns `201 Created`; an identical replay of
-the same event in the same session returns `200 OK` with
-`status: "already_processed"` and the original stored event. Reusing an event ID
-with changed semantics or another session returns `409 Conflict`.
+O produtor define o `event_id` UUIDv7 e o instante de ocorrência. A API define
+`received_at`. A primeira ingestão retorna `201 Created`; a repetição idêntica
+do mesmo evento na mesma sessão retorna `200 OK`, com
+`status: "already_processed"` e o evento original armazenado. Reutilizar um ID
+com semântica diferente ou em outra sessão retorna `409 Conflict`.
 
-Events are append-only. A completed session still accepts a late-delivered event
-when its producer timestamp falls within the session's inclusive start/end
-window.
+Os eventos são somente anexados. Uma sessão concluída ainda aceita um evento
+entregue com atraso quando o instante informado pelo produtor está dentro da
+janela inclusiva de início e fim da sessão.
 
-Event storage and event-ID arbitration use PostgreSQL. Session validation and
-event acceptance share the transaction owned by a per-operation unit of work,
-so persistence and replay protection do not depend on process-local locks.
+O armazenamento e a arbitragem de IDs utilizam PostgreSQL. A validação da
+sessão e a aceitação do evento compartilham a transação controlada por uma
+unidade de trabalho por operação. Assim, a persistência e a proteção contra
+repetições não dependem de locks locais do processo.
 
-## Attention read model
+## Modelo de leitura de atenção
 
-Read the latest semantic attention transition for a session:
+Consulte a transição semântica de atenção mais recente da sessão:
 
 ```http
 GET /sessions/{session_id}/attention-state
 ```
 
-Read a bounded recent-event window, newest semantic event first:
+Consulte uma janela limitada de eventos recentes, do mais novo para o mais
+antigo:
 
 ```http
 GET /sessions/{session_id}/events?limit=10
 ```
 
-`limit` defaults to `10` and accepts values from `1` through `50`. Event eye
-fields describe the observation captured at that event transition; they are not
-continuous live camera telemetry.
+`limit` utiliza `10` por padrão e aceita valores de `1` a `50`. Os campos
+oculares de um evento descrevem a observação capturada na transição; eles não
+representam telemetria contínua da câmera.
 
-## Tests
+## Testes
 
-Run the complete test suite:
+Execute a suíte completa:
 
 ```bash
 python -m pytest
